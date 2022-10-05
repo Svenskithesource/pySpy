@@ -1,5 +1,19 @@
+import dis
+
 import dearpygui.dearpygui as dpg
-import editor, opcode, marshal
+
+import editor
+import marshal
+import opcode
+
+FORMAT_VALUE_CONVERTERS = (
+    (None, ''),
+    (str, 'str'),
+    (repr, 'repr'),
+    (ascii, 'ascii'),
+)
+
+MAKE_FUNCTION_FLAGS = ('defaults', 'kwdefaults', 'annotations', 'closure')
 
 
 def save_init(sender):
@@ -20,7 +34,40 @@ def load_code(code):
         for inst in code.co_code:
             with dpg.table_row():
                 dpg.add_text(opcode.opname[inst.opcode])
-                dpg.add_text(inst.arg)
+                if inst.opcode in dis.hasconst:
+                    try:
+                        value = repr(code.co_consts[inst.arg])
+                    except IndexError:
+                        value = "Invalid constant index"
+                elif inst.opcode in dis.hasname:
+                    try:
+                        value = repr(code.co_names[inst.arg])
+                    except IndexError:
+                        value = "Invalid names index"
+                elif inst.opcode in dis.hascompare:
+                    try:
+                        value = dis.cmp_op[inst.arg]
+                    except IndexError:
+                        value = "Invalid compare argument"
+                elif inst.opcode == opcode.opmap["MAKE_FUNCTION"]:
+                    value = ', '.join(s for i, s in enumerate(MAKE_FUNCTION_FLAGS)
+                                      if inst.arg & (1 << i))
+                    if value == "":
+                        value = "Invalid make_function argument"
+                elif inst.opcode == opcode.opmap["FORMAT_VALUE"]:
+                    try:
+                        value = FORMAT_VALUE_CONVERTERS[inst.arg & 0x3]
+                    except IndexError:
+                        value = "Invalid format argument"
+                else:
+                    value = None
+
+                if value is None:
+                    value = inst.arg
+                else:
+                    value = f"{inst.arg:<5}({value})"
+
+                dpg.add_text(value)
 
     dpg.bind_item_font(table, co_code_font)
 
@@ -34,7 +81,7 @@ def load_code(code):
         for index, value in enumerate(code.co_consts):
             with dpg.table_row():
                 dpg.add_text(index)
-                dpg.add_text(value)
+                dpg.add_text(repr(value))
 
     dpg.bind_item_font(table, co_consts_font)
 
@@ -57,7 +104,7 @@ dpg.create_context()
 
 with dpg.font_registry():
     default_font = dpg.add_font("Roboto-Medium.ttf", 20 * 2)
-    co_code_font = dpg.add_font("Roboto-Medium.ttf", 30 * 2)
+    co_code_font = dpg.add_font("RobotoMono-Medium.ttf", 30 * 2)
     co_consts_font = dpg.add_font("Roboto-Medium.ttf", 25 * 2)
     co_names_font = co_consts_font
 
@@ -112,6 +159,7 @@ dpg.configure_app(docking=True, docking_space=True, init_file="dpg.ini")
 dpg.create_viewport()
 dpg.setup_dearpygui()
 dpg.show_viewport()
+dpg.set_viewport_title("pySpy")
 
 dpg.start_dearpygui()
 dpg.destroy_context()
