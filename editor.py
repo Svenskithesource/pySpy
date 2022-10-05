@@ -33,13 +33,17 @@ class Code:
             if inst.opcode in relative_jumps or inst.opcode in absolute_jumps:
                 target = [e for e in self.co_code if e.uid == inst.jump_target]
 
-                assert len(target) != 0, "Invalid target " + str(inst.jump_target)
+                # assert len(target) != 0, "Invalid target " + str(inst.jump_target)
 
-                target = target[0]
-                if inst.opcode in relative_jumps:
-                    inst.arg = (self.co_code.index(target) * 2) - (len(new_insts) * 2)
+                if len(target) == 0:
+                    inst.arg = inst.jump_target
                 else:
-                    inst.arg = self.co_code.index(target) * 2
+                    target = target[0]
+
+                    if inst.opcode in relative_jumps:
+                        inst.arg = (self.co_code.index(target) * 2) - (len(new_insts) * 2)
+                    else:
+                        inst.arg = self.co_code.index(target) * 2
 
             new_insts.append(inst)
 
@@ -117,9 +121,19 @@ def set_jump_targets(co_code):
     new_insts = []
     for i, inst in enumerate(co_code):
         if inst.opcode in relative_jumps:
-            inst = Instruction(inst.opcode, inst.arg, inst.uid, co_code[i + (inst.arg // 2)].uid)
+            try:
+                jump_target = co_code[i + (inst.arg // 2)].uid
+            except IndexError:
+                jump_target = inst.arg
+
+            inst = Instruction(inst.opcode, inst.arg, inst.uid, jump_target)
         elif inst.opcode in absolute_jumps:
-            inst = Instruction(inst.opcode, inst.arg, inst.uid, co_code[inst.arg // 2].uid)
+            try:
+                jump_target = co_code[inst.arg // 2].uid
+            except IndexError:
+                jump_target = inst.arg
+
+            inst = Instruction(inst.opcode, inst.arg, inst.uid, jump_target)
 
         new_insts.append(inst)
 
