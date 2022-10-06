@@ -20,6 +20,53 @@ def save_init(sender):
     dpg.save_init_file("dpg.ini")
 
 
+def get_repr(inst, code):
+    if inst.opcode in dis.hasconst:
+        try:
+            value = repr(code.co_consts[inst.arg])
+        except IndexError:
+            value = "Invalid constant index"
+    elif inst.opcode in dis.hasname:
+        try:
+            value = repr(code.co_names[inst.arg])
+        except IndexError:
+            value = "Invalid names index"
+    elif inst.opcode in dis.hascompare:
+        try:
+            value = dis.cmp_op[inst.arg]
+        except IndexError:
+            value = "Invalid compare argument"
+    elif inst.opcode == opcode.opmap["MAKE_FUNCTION"]:
+        value = ', '.join(s for i, s in enumerate(MAKE_FUNCTION_FLAGS)
+                          if inst.arg & (1 << i))
+
+        if value == "":
+            value = None
+
+    elif inst.opcode == opcode.opmap["FORMAT_VALUE"]:
+        try:
+            value = FORMAT_VALUE_CONVERTERS[inst.arg & 0x3]
+        except IndexError:
+            value = "Invalid format argument"
+    else:
+        value = None
+    elif
+
+    if value is None:
+        value = inst.arg
+    else:
+        value = f"{inst.arg:<5}({value})"
+
+    return value
+
+
+def refresh_code(code):
+    for i, inst in enumerate(code.co_code):
+        dpg.set_value(f"index_{i * 2}", opcode.opname[inst.opcode])
+        if inst.opcode >= opcode.HAVE_ARGUMENT:
+            dpg.set_value(f"index_{i * 2}", get_repr(inst, code))
+
+
 def load_code(code):
     code = editor.code2custom(code)
 
@@ -31,43 +78,13 @@ def load_code(code):
         dpg.add_table_column(label="Opcode")
         dpg.add_table_column(label="Argument")
 
-        for inst in code.co_code:
+        for i, inst in enumerate(code.co_code):
             with dpg.table_row():
-                dpg.add_text(opcode.opname[inst.opcode])
-                if inst.opcode in dis.hasconst:
-                    try:
-                        value = repr(code.co_consts[inst.arg])
-                    except IndexError:
-                        value = "Invalid constant index"
-                elif inst.opcode in dis.hasname:
-                    try:
-                        value = repr(code.co_names[inst.arg])
-                    except IndexError:
-                        value = "Invalid names index"
-                elif inst.opcode in dis.hascompare:
-                    try:
-                        value = dis.cmp_op[inst.arg]
-                    except IndexError:
-                        value = "Invalid compare argument"
-                elif inst.opcode == opcode.opmap["MAKE_FUNCTION"]:
-                    value = ', '.join(s for i, s in enumerate(MAKE_FUNCTION_FLAGS)
-                                      if inst.arg & (1 << i))
-                    if value == "":
-                        value = "Invalid make_function argument"
-                elif inst.opcode == opcode.opmap["FORMAT_VALUE"]:
-                    try:
-                        value = FORMAT_VALUE_CONVERTERS[inst.arg & 0x3]
-                    except IndexError:
-                        value = "Invalid format argument"
-                else:
-                    value = None
+                dpg.add_text(opcode.opname[inst.opcode], tag=f"index_{i * 2}")
 
-                if value is None:
-                    value = inst.arg
-                else:
-                    value = f"{inst.arg:<5}({value})"
-
-                dpg.add_text(value)
+                if inst.opcode >= opcode.HAVE_ARGUMENT:
+                    value = get_repr(inst, code)
+                    dpg.add_text(value, tag=f"index_{(i * 2) + 1}")
 
     dpg.bind_item_font(table, co_code_font)
 
