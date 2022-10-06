@@ -50,7 +50,6 @@ def get_repr(inst, code):
             value = "Invalid format argument"
     else:
         value = None
-    elif
 
     if value is None:
         value = inst.arg
