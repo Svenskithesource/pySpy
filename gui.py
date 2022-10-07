@@ -20,8 +20,8 @@ MAKE_FUNCTION_FLAGS = ('defaults', 'kwdefaults', 'annotations', 'closure')
 def save_init(sender):
     dpg.save_init_file("dpg.ini")
 
-# def save_changes(sender):
-#
+def apply_changes(sender):
+
 
 def get_repr(inst, code):
     if inst.opcode in dis.hasconst:
@@ -164,7 +164,7 @@ with dpg.window(label="Constants", tag="co_consts_window", no_close=True):
 
 with dpg.window(label="Names", tag="co_names_window", no_close=True):
     with dpg.menu_bar():
-        dpg.add_button(label="Save changes", tag="co_names_save")
+        dpg.add_button(label="Apply changes", tag="co_names_apply")
 
     with dpg.table(tag="co_names_table", header_row=True, row_background=False, policy=dpg.mvTable_SizingFixedFit,
                    borders_innerH=True, borders_outerH=True, borders_innerV=True,
