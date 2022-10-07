@@ -6,6 +6,7 @@ import editor
 import marshal
 import opcode
 
+
 FORMAT_VALUE_CONVERTERS = (
     (None, ''),
     (str, 'str'),
@@ -19,6 +20,8 @@ MAKE_FUNCTION_FLAGS = ('defaults', 'kwdefaults', 'annotations', 'closure')
 def save_init(sender):
     dpg.save_init_file("dpg.ini")
 
+# def save_changes(sender):
+#
 
 def get_repr(inst, code):
     if inst.opcode in dis.hasconst:
@@ -73,7 +76,7 @@ def load_code(code):
     with dpg.table(tag="co_code_table", header_row=True, row_background=False,
                    policy=dpg.mvTable_SizingFixedFit,
                    borders_innerH=True, borders_outerH=True, borders_innerV=True,
-                   borders_outerV=True, parent="co_code_window") as table:
+                   borders_outerV=True, parent="co_code_window", scrollX=True) as table:
         dpg.add_table_column(label="Opcode")
         dpg.add_table_column(label="Argument")
 
@@ -90,7 +93,7 @@ def load_code(code):
     dpg.delete_item("co_consts_table")
     with dpg.table(tag="co_consts_table", header_row=True, row_background=False, policy=dpg.mvTable_SizingFixedFit,
                    borders_innerH=True, borders_outerH=True, borders_innerV=True,
-                   borders_outerV=True, parent="co_consts_window") as table:
+                   borders_outerV=True, parent="co_consts_window", scrollX=True) as table:
         dpg.add_table_column(label="Index")
         dpg.add_table_column(label="Value")
 
@@ -104,7 +107,7 @@ def load_code(code):
     dpg.delete_item("co_names_table")
     with dpg.table(tag="co_names_table", header_row=True, row_background=False, policy=dpg.mvTable_SizingFixedFit,
                    borders_innerH=True, borders_outerH=True, borders_innerV=True,
-                   borders_outerV=True, parent="co_names_window") as table:
+                   borders_outerV=True, parent="co_names_window", scrollX=True) as table:
         dpg.add_table_column(label="Index")
         dpg.add_table_column(label="Value")
 
@@ -160,6 +163,9 @@ with dpg.window(label="Constants", tag="co_consts_window", no_close=True):
     dpg.bind_item_font(table, co_consts_font)
 
 with dpg.window(label="Names", tag="co_names_window", no_close=True):
+    with dpg.menu_bar():
+        dpg.add_button(label="Save changes", tag="co_names_save")
+
     with dpg.table(tag="co_names_table", header_row=True, row_background=False, policy=dpg.mvTable_SizingFixedFit,
                    borders_innerH=True, borders_outerH=True, borders_innerV=True,
                    borders_outerV=True) as table:
