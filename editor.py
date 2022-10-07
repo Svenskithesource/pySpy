@@ -143,8 +143,17 @@ def set_jump_targets(co_code: typing.List[Instruction]) -> typing.List[Instructi
 
 
 def code2custom(code: types.CodeType) -> Code:
-    obj = Code(code)
-    obj.co_code = bytes2insts(obj.co_code)
-    obj.co_code = set_jump_targets(obj.co_code)
+    code = Code(code)
+    code.co_code = bytes2insts(code.co_code)
 
-    return obj
+    new_consts = []
+    for const in code.co_consts:
+        if isinstance(const, types.CodeType):
+            const = code2custom(const)
+            const.co_code = set_jump_targets(const.co_code)
+
+        new_consts.append(const)
+
+    code.co_consts = new_consts
+
+    return code
