@@ -1,4 +1,5 @@
 import opcode, uuid, dis
+import typing, types
 
 EXTENDED_ARG = opcode.opmap["EXTENDED_ARG"]
 
@@ -21,13 +22,30 @@ class Instruction:
         return f"<Instruction opcode={opcode.opname[self.opcode]}, arg={self.arg}, uid={self.uid}, jump_target={self.jump_target}>"
 
 
+def calculate_extended_args(arg):
+    extended_args = []
+    new_arg = arg
+    if arg > 255:
+        extended_arg = arg >> 8
+        while True:
+            if extended_arg > 255:
+                extended_arg -= 255
+                extended_args.append(255)
+            else:
+                extended_args.append(extended_arg)
+                break
+
+        new_arg = arg % 256
+    return extended_args, new_arg
+
+
 class Code:
     def __init__(self, code):
         for attr in dir(code):
             if attr.startswith("co_"):
                 setattr(self, attr, getattr(code, attr))
 
-    def resolve_jumps(self):
+    def resolve_jumps(self) -> typing.List[Instruction]:
         new_insts = []
         for inst in self.co_code:
             if inst.opcode in relative_jumps or inst.opcode in absolute_jumps:
@@ -49,29 +67,13 @@ class Code:
 
         return new_insts
 
-    def calculate_extended_args(self, arg):
-        extended_args = []
-        new_arg = arg
-        if arg > 255:
-            extended_arg = arg >> 8
-            while True:
-                if extended_arg > 255:
-                    extended_arg -= 255
-                    extended_args.append(255)
-                else:
-                    extended_args.append(extended_arg)
-                    break
-
-            new_arg = arg % 256
-        return extended_args, new_arg
-
-    def code2bytes(self):
+    def code2bytes(self) -> bytes:
         if isinstance(self.co_code, list):
             self.co_code = self.resolve_jumps()
             new = bytearray()
 
             for inst in self.co_code:
-                extended_args, new_arg = self.calculate_extended_args(inst.arg)
+                extended_args, new_arg = calculate_extended_args(inst.arg)
 
                 for extended_arg in extended_args:
                     print("used")
@@ -83,7 +85,7 @@ class Code:
 
             return bytes(new)
 
-    def to_native(self):
+    def to_native(self) -> types.CodeType:
         def empty():
             pass
 
@@ -92,7 +94,7 @@ class Code:
         return empty.__code__.replace(**{key: value for key, value in vars(self).items() if key.startswith("co_")})
 
 
-def bytes2insts(co_code):
+def bytes2insts(co_code: bytes) -> typing.List[Instruction]:
     instructions = []
     i = 0
     while i < len(co_code):
@@ -117,7 +119,7 @@ def bytes2insts(co_code):
     return instructions
 
 
-def set_jump_targets(co_code):
+def set_jump_targets(co_code: typing.List[Instruction]) -> typing.List[Instruction]:
     new_insts = []
     for i, inst in enumerate(co_code):
         if inst.opcode in relative_jumps:
@@ -140,7 +142,7 @@ def set_jump_targets(co_code):
     return new_insts
 
 
-def code2custom(code):
+def code2custom(code: types.CodeType) -> Code:
     obj = Code(code)
     obj.co_code = bytes2insts(obj.co_code)
     obj.co_code = set_jump_targets(obj.co_code)
