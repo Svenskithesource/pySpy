@@ -41,6 +41,7 @@ def calculate_extended_args(arg):
 
 class Code:
     def __init__(self, code):
+        self.uid = uuid.uuid4()
         for attr in dir(code):
             if attr.startswith("co_"):
                 setattr(self, attr, getattr(code, attr))
@@ -93,6 +94,9 @@ class Code:
 
         return empty.__code__.replace(**{key: value for key, value in vars(self).items() if key.startswith("co_")})
 
+    def __repr__(self):
+        return f"<Code object {self.co_name} at {hex(id(self))}"
+
 
 def bytes2insts(co_code: bytes) -> typing.List[Instruction]:
     instructions = []
@@ -142,18 +146,28 @@ def set_jump_targets(co_code: typing.List[Instruction]) -> typing.List[Instructi
     return new_insts
 
 
-def code2custom(code: types.CodeType) -> Code:
+def code2custom(code: types.CodeType, make_list=True) -> Code:
+    tree = {}
     code = Code(code)
     code.co_code = bytes2insts(code.co_code)
+    code.co_code = set_jump_targets(code.co_code)
+    code_objects = []
 
     new_consts = []
     for const in code.co_consts:
         if isinstance(const, types.CodeType):
-            const = code2custom(const)
-            const.co_code = set_jump_targets(const.co_code)
+            const, const_code_objects, const_tree = code2custom(const, make_list=False)
+            code_objects.extend(const_code_objects)
+            tree[const] = const_tree
+            code_objects.append(const)
 
         new_consts.append(const)
 
     code.co_consts = new_consts
 
-    return code
+    if make_list:
+        code.code_objects = code_objects
+        code.tree = tree
+        return code
+
+    return code, code_objects, tree if tree else None

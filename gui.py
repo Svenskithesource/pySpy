@@ -1,11 +1,11 @@
 import dis
+import types
 
 import dearpygui.dearpygui as dpg
 
 import editor
 import marshal
 import opcode
-
 
 FORMAT_VALUE_CONVERTERS = (
     (None, ''),
@@ -20,7 +20,9 @@ MAKE_FUNCTION_FLAGS = ('defaults', 'kwdefaults', 'annotations', 'closure')
 def save_init(sender):
     dpg.save_init_file("dpg.ini")
 
+
 def apply_changes(sender):
+    pass
 
 
 def get_repr(inst, code):
@@ -69,9 +71,15 @@ def refresh_code(code):
             dpg.set_value(f"index_{i * 2}", get_repr(inst, code))
 
 
-def load_code(code):
-    code = editor.code2custom(code)
+def create_node(code, tree, parent, expand=False):
+    tag = "tree_" + str(code.uid)
+    with dpg.tree_node(label=code.co_name, tag=tag, parent=parent, default_open=expand, ):
+        if tree:
+            for obj, obj_tree in tree.items():
+                create_node(obj, obj_tree, tag)
 
+
+def load_code(code):
     dpg.delete_item("co_code_table")
     with dpg.table(tag="co_code_table", header_row=True, row_background=False,
                    policy=dpg.mvTable_SizingFixedFit,
@@ -133,6 +141,11 @@ def open_file(sender, app_data, user_data):
     file.seek(16)  # Skip the pyc header
     code = marshal.loads(file.read())
 
+    code = editor.code2custom(code)
+
+    dpg.delete_item("code_objects_tree")
+    create_node(code, code.tree, "code_objects_window", True)
+
     load_code(code)
 
 
@@ -173,6 +186,11 @@ with dpg.window(label="Names", tag="co_names_window", no_close=True):
         dpg.add_table_column(label="Value")
 
     dpg.bind_item_font(table, co_names_font)
+
+with dpg.window(label="Code Objects", tag="code_objects_window", no_close=True):
+    tree = dpg.add_tree_node(tag="code_objects_tree")
+
+    dpg.bind_item_font(tree, default_font)
 
 dpg.bind_font(default_font)
 dpg.set_global_font_scale(0.5)
