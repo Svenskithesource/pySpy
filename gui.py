@@ -73,7 +73,11 @@ def refresh_code(code):
 
 def create_node(code, tree, parent, expand=False):
     tag = "tree_" + str(code.uid)
-    with dpg.tree_node(label=code.co_name, tag=tag, parent=parent, default_open=expand, ):
+    node_handlers = dpg.add_item_handler_registry()
+    dpg.add_item_clicked_handler(tag=tag, parent=node_handlers, callback=lambda ok: print(ok))
+
+    with dpg.tree_node(label=code.co_name, tag=tag, parent=parent, default_open=expand) as cur_tree:
+        dpg.bind_item_handler_registry(cur_tree, node_handlers, )
         if tree:
             for obj, obj_tree in tree.items():
                 create_node(obj, obj_tree, tag)
@@ -144,6 +148,7 @@ def open_file(sender, app_data, user_data):
     code = editor.code2custom(code)
 
     dpg.delete_item("code_objects_tree")
+
     create_node(code, code.tree, "code_objects_window", True)
 
     load_code(code)
