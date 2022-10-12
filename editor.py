@@ -86,11 +86,21 @@ class Code:
 
             return bytes(new)
 
-    def to_native(self) -> types.CodeType:
+    def to_native(self, code_objects=None) -> types.CodeType:
         def empty():
             pass
 
         self.co_code = self.code2bytes()
+        new_consts = []
+        for const in self.co_consts:
+            if isinstance(const, Code):
+                code_objects = self.code_objects if getattr(self, "code_objects", None) else code_objects
+                code = [e for e in code_objects if str(const.uid) == str(e.uid)]
+                const = code[0].to_native()
+
+            new_consts.append(const)
+
+        self.co_consts = tuple(new_consts)
 
         return empty.__code__.replace(**{key: value for key, value in vars(self).items() if key.startswith("co_")})
 
