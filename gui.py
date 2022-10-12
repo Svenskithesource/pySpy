@@ -83,7 +83,7 @@ def find_code(uid):
 
 
 def open_code_handler(sender, data):
-    if not data[0]: # Only when left clicked
+    if not data[0]:  # Only when left-clicked
         if dpg.get_item_configuration(data[1])["user_data"] == dpg.get_value(data[1]):  # Only trigger if the element was clicked without the arrow
             load_code(find_code(data[1].replace("tree_", "")))
 
@@ -94,7 +94,7 @@ def create_node(code, tree, parent, expand=False, tag=None):
     if tag is None:
         tag = "tree_" + str(code.uid)
     node_handlers = dpg.add_item_handler_registry()
-    # dpg.add_item_activated_handler(tag=tag + "_handler", parent=node_handlers, callback=lambda ok: print(ok))
+
     dpg.add_item_clicked_handler(tag=tag + "_handler", parent=node_handlers, callback=open_code_handler)
 
     with dpg.tree_node(label=code.co_name, tag=tag, parent=parent, default_open=expand, open_on_arrow=True, user_data=expand) as cur_tree:
