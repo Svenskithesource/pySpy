@@ -17,6 +17,7 @@ FORMAT_VALUE_CONVERTERS = (
 MAKE_FUNCTION_FLAGS = ('defaults', 'kwdefaults', 'annotations', 'closure')
 
 main_code = None
+current_code = None
 
 
 def save_init(sender):
@@ -24,7 +25,27 @@ def save_init(sender):
 
 
 def apply_changes(sender):
-    pass
+    if sender == "co_names_apply":
+        new_names = []
+
+        i = 0
+        while True:
+            value = dpg.get_value(f"name_{i}")
+            if value is None:
+                break
+
+            new_names.append(value)
+            i += 1
+
+        global main_code
+        if current_code == main_code.uid:
+            main_code.co_names = tuple(new_names)
+        else:
+            i, code = find_code(current_code)
+            code.co_names = tuple(new_names)
+            main_code.code_objects[i] = code
+
+        refresh_code()
 
 
 def get_repr(inst, code):
@@ -66,15 +87,15 @@ def get_repr(inst, code):
     return value
 
 
-def refresh_code(code):
-    for i, inst in enumerate(code.co_code):
-        dpg.set_value(f"index_{i * 2}", opcode.opname[inst.opcode])
-        if inst.opcode >= opcode.HAVE_ARGUMENT:
-            dpg.set_value(f"index_{i * 2}", get_repr(inst, code))
+def refresh_code():
+    code = find_code(current_code)
+    load_code(code)
 
 
 def find_code(uid):
-    code = [e for e in main_code.code_objects if str(e.uid) == uid]
+    if uid == main_code.uid:
+        return main_code
+    code = [(i, e) for i, e in enumerate(main_code.code_objects) if str(e.uid) == uid]
 
     if len(code) != 1:
         print(f"UID ({uid}) was found {len(code)} times")
@@ -84,8 +105,12 @@ def find_code(uid):
 
 def open_code_handler(sender, data):
     if not data[0]:  # Only when left-clicked
-        if dpg.get_item_configuration(data[1])["user_data"] == dpg.get_value(data[1]):  # Only trigger if the element was clicked without the arrow
-            load_code(find_code(data[1].replace("tree_", "")))
+        global current_code
+        if dpg.get_item_configuration(data[1])["user_data"] == dpg.get_value(
+                data[1]):  # Only trigger if the element was clicked without the arrow
+            code = find_code(data[1].replace("tree_", ""))[1]
+            current_code = code.uid
+            load_code(code)
 
         dpg.configure_item(data[1], user_data=dpg.get_value(data[1]))
 
@@ -97,7 +122,8 @@ def create_node(code, tree, parent, expand=False, tag=None):
 
     dpg.add_item_clicked_handler(tag=tag + "_handler", parent=node_handlers, callback=open_code_handler)
 
-    with dpg.tree_node(label=code.co_name, tag=tag, parent=parent, default_open=expand, open_on_arrow=True, user_data=expand) as cur_tree:
+    with dpg.tree_node(label=code.co_name, tag=tag, parent=parent, default_open=expand, open_on_arrow=True,
+                       user_data=expand) as cur_tree:
         dpg.bind_item_handler_registry(cur_tree, node_handlers)
         if tree:
             for obj, obj_tree in tree.items():
@@ -116,12 +142,12 @@ def load_code(code):
 
         for i, inst in enumerate(code.co_code):
             with dpg.table_row():
-                dpg.add_text(i*2)
-                dpg.add_text(opcode.opname[inst.opcode], tag=f"index_{i * 2}")
+                dpg.add_text(i * 2)
+                dpg.add_text(opcode.opname[inst.opcode], tag=f"code_{i * 2}")
 
                 if inst.opcode >= opcode.HAVE_ARGUMENT:
                     value = get_repr(inst, code)
-                    dpg.add_text(value, tag=f"index_{(i * 2) + 1}")
+                    dpg.add_text(value, tag=f"code_{(i * 2) + 1}")
 
     dpg.bind_item_font(table, co_code_font)
 
@@ -150,7 +176,7 @@ def load_code(code):
         for index, value in enumerate(code.co_names):
             with dpg.table_row():
                 dpg.add_text(index)
-                dpg.add_text(value)
+                dpg.add_input_text(default_value=value, tag=f"name_{index}")
 
     dpg.bind_item_font(table, co_names_font)
 
@@ -166,6 +192,7 @@ with dpg.font_registry():
 
 def open_file(sender, app_data, user_data):
     global main_code
+    global current_code
     file = open(app_data['file_path_name'], "rb")
     file.seek(16)  # Skip the pyc header
     code = marshal.loads(file.read())
@@ -173,6 +200,7 @@ def open_file(sender, app_data, user_data):
     code = editor.code2custom(code)
 
     main_code = code
+    current_code = code.uid
 
     dpg.delete_item("code_objects_tree")
 
@@ -181,7 +209,8 @@ def open_file(sender, app_data, user_data):
     load_code(code)
 
 
-with dpg.file_dialog(directory_selector=False, show=False, file_count=1, callback=open_file, id="select_file", width=800, height=400):
+with dpg.file_dialog(directory_selector=False, show=False, file_count=1, callback=open_file, id="select_file",
+                     width=800, height=400):
     dpg.add_file_extension(".pyc", color=(0, 255, 0, 255))
 
 with dpg.viewport_menu_bar():
@@ -209,7 +238,7 @@ with dpg.window(label="Constants", tag="co_consts_window", no_close=True):
 
 with dpg.window(label="Names", tag="co_names_window", no_close=True):
     with dpg.menu_bar():
-        dpg.add_button(label="Apply changes", tag="co_names_apply")
+        dpg.add_button(label="Apply changes", tag="co_names_apply", callback=apply_changes)
 
     with dpg.table(tag="co_names_table", header_row=True, row_background=False, policy=dpg.mvTable_SizingFixedFit,
                    borders_innerH=True, borders_outerH=True, borders_innerV=True,
