@@ -110,11 +110,13 @@ def load_code(code):
                    policy=dpg.mvTable_SizingFixedFit,
                    borders_innerH=True, borders_outerH=True, borders_innerV=True,
                    borders_outerV=True, parent="co_code_window", scrollX=True) as table:
+        dpg.add_table_column(label="Index")
         dpg.add_table_column(label="Opcode")
         dpg.add_table_column(label="Argument")
 
         for i, inst in enumerate(code.co_code):
             with dpg.table_row():
+                dpg.add_text(i*2)
                 dpg.add_text(opcode.opname[inst.opcode], tag=f"index_{i * 2}")
 
                 if inst.opcode >= opcode.HAVE_ARGUMENT:
