@@ -1,4 +1,4 @@
-import opcode, uuid, dis
+import opcode, uuid, dis, copy
 import typing, types
 
 EXTENDED_ARG = opcode.opmap["EXTENDED_ARG"]
@@ -87,22 +87,24 @@ class Code:
             return bytes(new)
 
     def to_native(self, code_objects=None) -> types.CodeType:
+        own_copy = copy.deepcopy(self)  # So we don't overwrite attributes in the current object
+
         def empty():
             pass
 
-        self.co_code = self.code2bytes()
+        own_copy.co_code = own_copy.code2bytes()
         new_consts = []
-        for const in self.co_consts:
+        for const in own_copy.co_consts:
             if isinstance(const, Code):
-                code_objects = self.code_objects if getattr(self, "code_objects", None) else code_objects
+                code_objects = own_copy.code_objects if getattr(own_copy, "code_objects", None) else code_objects
                 code = [e for e in code_objects if str(const.uid) == str(e.uid)]
                 const = code[0].to_native()
 
             new_consts.append(const)
 
-        self.co_consts = tuple(new_consts)
+        own_copy.co_consts = tuple(new_consts)
 
-        return empty.__code__.replace(**{key: value for key, value in vars(self).items() if key.startswith("co_")})
+        return empty.__code__.replace(**{key: value for key, value in vars(own_copy).items() if key.startswith("co_")})
 
     def __repr__(self):
         return f"<Code object {self.co_name} at {hex(id(self))}"

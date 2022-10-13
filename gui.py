@@ -1,4 +1,3 @@
-import dis
 import types
 
 import dearpygui.dearpygui as dpg
@@ -6,6 +5,10 @@ import dearpygui.dearpygui as dpg
 import editor
 import marshal
 import opcode
+import dis
+
+import ast
+import importlib.util
 
 FORMAT_VALUE_CONVERTERS = (
     (None, ''),
@@ -24,7 +27,15 @@ def save_init(sender):
     dpg.save_init_file("dpg.ini")
 
 
+def export(sender, data):
+    file = open(data['file_path_name'], "wb")
+    header = bytes(importlib.util.MAGIC_NUMBER).ljust(16, b"\x00")
+
+    file.write(header + marshal.dumps(main_code.to_native()))
+
+
 def apply_changes(sender):
+    global main_code
     if sender == "co_names_apply":
         new_names = []
 
@@ -37,7 +48,6 @@ def apply_changes(sender):
             new_names.append(value)
             i += 1
 
-        global main_code
         if current_code == main_code.uid:
             main_code.co_names = tuple(new_names)
         else:
@@ -45,7 +55,28 @@ def apply_changes(sender):
             code.co_names = tuple(new_names)
             main_code.code_objects[i] = code
 
-        refresh_code()
+        refresh_co_code()
+
+    elif sender == "co_consts_apply":
+        new_consts = []
+
+        i = 0
+        while True:
+            value = dpg.get_value(f"const_{i}")
+            if value is None:
+                break
+
+            new_consts.append(ast.literal_eval(value))
+            i += 1
+
+        if current_code == main_code.uid:
+            main_code.co_consts = tuple(new_consts)
+        else:
+            i, code = find_code(current_code)
+            code.co_names = tuple(new_consts)
+            main_code.code_objects[i] = code
+
+        refresh_co_code()
 
 
 def get_repr(inst, code):
@@ -87,14 +118,9 @@ def get_repr(inst, code):
     return value
 
 
-def refresh_code():
-    code = find_code(current_code)
-    load_code(code)
-
-
 def find_code(uid):
     if uid == main_code.uid:
-        return main_code
+        return 0, main_code
     code = [(i, e) for i, e in enumerate(main_code.code_objects) if str(e.uid) == uid]
 
     if len(code) != 1:
@@ -108,7 +134,8 @@ def open_code_handler(sender, data):
         global current_code
         if dpg.get_item_configuration(data[1])["user_data"] == dpg.get_value(
                 data[1]):  # Only trigger if the element was clicked without the arrow
-            code = find_code(data[1].replace("tree_", ""))[1]
+            uid = main_code.uid if "code_objects_tree" in data[1] else data[1].replace("tree_", "")
+            _, code = find_code(uid)
             current_code = code.uid
             load_code(code)
 
@@ -130,7 +157,7 @@ def create_node(code, tree, parent, expand=False, tag=None):
                 create_node(obj, obj_tree, tag)
 
 
-def load_code(code):
+def load_co_code(code):
     dpg.delete_item("co_code_table")
     with dpg.table(tag="co_code_table", header_row=True, row_background=False,
                    policy=dpg.mvTable_SizingFixedFit,
@@ -151,6 +178,19 @@ def load_code(code):
 
     dpg.bind_item_font(table, co_code_font)
 
+
+# The differences with load_ and refresh_ is that refresh_ actually updates the items inplace and load_ resets and re-adds
+def refresh_co_code():
+    _, code = find_code(current_code)
+    for i, inst in enumerate(code.co_code):
+        dpg.set_value(f"code_{i * 2}", opcode.opname[inst.opcode])
+
+        if inst.opcode >= opcode.HAVE_ARGUMENT:
+            value = get_repr(inst, code)
+            dpg.set_value(f"code_{(i * 2) + 1}", value)
+
+
+def load_co_consts(code):
     dpg.delete_item("co_consts_table")
     with dpg.table(tag="co_consts_table", header_row=True, row_background=False, policy=dpg.mvTable_SizingFixedFit,
                    borders_innerH=True, borders_outerH=True, borders_innerV=True,
@@ -162,23 +202,33 @@ def load_code(code):
             if not isinstance(value, types.CodeType) and not isinstance(value, editor.Code):
                 with dpg.table_row():
                     dpg.add_text(index)
-                    dpg.add_text(repr(value))
+                    dpg.add_input_text(default_value=repr(value), tag=f"const_{index}", width=400)
 
     dpg.bind_item_font(table, co_consts_font)
 
+
+def load_co_names(code):
     dpg.delete_item("co_names_table")
     with dpg.table(tag="co_names_table", header_row=True, row_background=False, policy=dpg.mvTable_SizingFixedFit,
                    borders_innerH=True, borders_outerH=True, borders_innerV=True,
                    borders_outerV=True, parent="co_names_window", scrollX=True) as table:
         dpg.add_table_column(label="Index")
-        dpg.add_table_column(label="Value")
+        value_col = dpg.add_table_column(label="Value")
 
         for index, value in enumerate(code.co_names):
-            with dpg.table_row():
+            with dpg.table_row() as row:
                 dpg.add_text(index)
-                dpg.add_input_text(default_value=value, tag=f"name_{index}")
+                dpg.add_input_text(default_value=value, tag=f"name_{index}", width=400)
 
     dpg.bind_item_font(table, co_names_font)
+
+
+def load_code(code):
+    load_co_code(code)
+
+    load_co_consts(code)
+
+    load_co_names(code)
 
 
 dpg.create_context()
@@ -213,21 +263,29 @@ with dpg.file_dialog(directory_selector=False, show=False, file_count=1, callbac
                      width=800, height=400):
     dpg.add_file_extension(".pyc", color=(0, 255, 0, 255))
 
+with dpg.file_dialog(directory_selector=False, show=False, file_count=1, callback=export, id="save_file",
+                     width=800, height=400):
+    dpg.add_file_extension(".pyc", color=(0, 255, 0, 255))
+
 with dpg.viewport_menu_bar():
     with dpg.menu(label="File"):
         dpg.add_menu_item(label="Open", callback=lambda: dpg.show_item("select_file"))
         dpg.add_menu_item(label="Save layout", callback=save_init)
+        dpg.add_menu_item(label="Export .pyc file", callback=lambda: dpg.show_item("save_file"))
 
 with dpg.window(label="Instructions", tag="co_code_window", no_close=True):
     with dpg.table(tag="co_code_table", header_row=True, row_background=False, policy=dpg.mvTable_SizingFixedFit,
                    borders_innerH=True, borders_outerH=True, borders_innerV=True,
                    borders_outerV=True) as table:
+        dpg.add_table_column(label="Index")
         dpg.add_table_column(label="Opcode")
         dpg.add_table_column(label="Argument")
 
     dpg.bind_item_font(table, co_code_font)
 
 with dpg.window(label="Constants", tag="co_consts_window", no_close=True):
+    with dpg.menu_bar():
+        dpg.add_button(label="Apply changes", tag="co_consts_apply", callback=apply_changes)
     with dpg.table(tag="co_consts_table", header_row=True, row_background=False, policy=dpg.mvTable_SizingFixedFit,
                    borders_innerH=True, borders_outerH=True, borders_innerV=True,
                    borders_outerV=True) as table:
