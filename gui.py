@@ -1,3 +1,4 @@
+import os.path
 import types
 
 import dearpygui.dearpygui as dpg
@@ -34,9 +35,9 @@ def export(sender, data):
     file.write(header + marshal.dumps(main_code.to_native()))
 
 
-def apply_changes(sender):
+def apply_changes(sender, data, user_data):
     global main_code
-    if sender == "co_names_apply":
+    if user_data == "co_names_apply":
         new_names = []
 
         i = 0
@@ -57,7 +58,7 @@ def apply_changes(sender):
 
         refresh_co_code()
 
-    elif sender == "co_consts_apply":
+    elif user_data == "co_consts_apply":
         new_consts = []
 
         i = 0
@@ -70,8 +71,10 @@ def apply_changes(sender):
             i += 1
 
         if current_code == main_code.uid:
+            print(new_consts, "main")
             main_code.co_consts = tuple(new_consts)
         else:
+            print(new_consts, "other")
             i, code = find_code(current_code)
             code.co_names = tuple(new_consts)
             main_code.code_objects[i] = code
@@ -121,7 +124,7 @@ def get_repr(inst, code):
 def find_code(uid):
     if uid == main_code.uid:
         return 0, main_code
-    code = [(i, e) for i, e in enumerate(main_code.code_objects) if str(e.uid) == uid]
+    code = [(i, e) for i, e in enumerate(main_code.code_objects) if str(e.uid) == str(uid)]
 
     if len(code) != 1:
         print(f"UID ({uid}) was found {len(code)} times")
@@ -142,15 +145,20 @@ def open_code_handler(sender, data):
         dpg.configure_item(data[1], user_data=dpg.get_value(data[1]))
 
 
-def create_node(code, tree, parent, expand=False, tag=None):
+def create_node(code, tree, parent, expand=False, tag=None, name=None):
     if tag is None:
         tag = "tree_" + str(code.uid)
-    node_handlers = dpg.add_item_handler_registry()
 
-    dpg.add_item_clicked_handler(tag=tag + "_handler", parent=node_handlers, callback=open_code_handler)
+    skip = dpg.does_item_exist(tag + "_handler")
+    if not skip:
+        node_handlers = dpg.add_item_handler_registry()
 
-    with dpg.tree_node(label=code.co_name, tag=tag, parent=parent, default_open=expand, open_on_arrow=True,
-                       user_data=expand) as cur_tree:
+        dpg.add_item_clicked_handler(tag=tag + "_handler", parent=node_handlers, callback=open_code_handler)
+    else:
+        node_handlers = dpg.get_item_parent(tag + "_handler")
+
+    with dpg.tree_node(label=name if name else code.co_name, tag=tag, parent=parent, default_open=expand, open_on_arrow=True,
+                       user_data=expand, leaf=True if not tree else False) as cur_tree:
         dpg.bind_item_handler_registry(cur_tree, node_handlers)
         if tree:
             for obj, obj_tree in tree.items():
@@ -202,7 +210,8 @@ def load_co_consts(code):
             if not isinstance(value, types.CodeType) and not isinstance(value, editor.Code):
                 with dpg.table_row():
                     dpg.add_text(index)
-                    dpg.add_input_text(default_value=repr(value), tag=f"const_{index}", width=400)
+                    dpg.add_input_text(default_value=repr(value), tag=f"const_{index}", width=400,
+                                       user_data="co_consts_apply", callback=apply_changes, on_enter=True)
 
     dpg.bind_item_font(table, co_consts_font)
 
@@ -218,7 +227,8 @@ def load_co_names(code):
         for index, value in enumerate(code.co_names):
             with dpg.table_row() as row:
                 dpg.add_text(index)
-                dpg.add_input_text(default_value=value, tag=f"name_{index}", width=400)
+                dpg.add_input_text(default_value=value, tag=f"name_{index}", width=400, user_data="co_names_apply",
+                                   callback=apply_changes, on_enter=True)
 
     dpg.bind_item_font(table, co_names_font)
 
@@ -253,8 +263,7 @@ def open_file(sender, app_data, user_data):
     current_code = code.uid
 
     dpg.delete_item("code_objects_tree")
-
-    create_node(code, code.tree, "code_objects_window", expand=True, tag="code_objects_tree")
+    create_node(code, code.tree, "code_objects_window", expand=True, tag="code_objects_tree", name=os.path.splitext(os.path.basename(app_data['file_path_name']))[0])
 
     load_code(code)
 
@@ -284,8 +293,6 @@ with dpg.window(label="Instructions", tag="co_code_window", no_close=True):
     dpg.bind_item_font(table, co_code_font)
 
 with dpg.window(label="Constants", tag="co_consts_window", no_close=True):
-    with dpg.menu_bar():
-        dpg.add_button(label="Apply changes", tag="co_consts_apply", callback=apply_changes)
     with dpg.table(tag="co_consts_table", header_row=True, row_background=False, policy=dpg.mvTable_SizingFixedFit,
                    borders_innerH=True, borders_outerH=True, borders_innerV=True,
                    borders_outerV=True) as table:
@@ -295,9 +302,6 @@ with dpg.window(label="Constants", tag="co_consts_window", no_close=True):
     dpg.bind_item_font(table, co_consts_font)
 
 with dpg.window(label="Names", tag="co_names_window", no_close=True):
-    with dpg.menu_bar():
-        dpg.add_button(label="Apply changes", tag="co_names_apply", callback=apply_changes)
-
     with dpg.table(tag="co_names_table", header_row=True, row_background=False, policy=dpg.mvTable_SizingFixedFit,
                    borders_innerH=True, borders_outerH=True, borders_innerV=True,
                    borders_outerV=True) as table:
