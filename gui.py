@@ -71,10 +71,8 @@ def apply_changes(sender, data, user_data):
             i += 1
 
         if current_code == main_code.uid:
-            print(new_consts, "main")
             main_code.co_consts = tuple(new_consts)
         else:
-            print(new_consts, "other")
             i, code = find_code(current_code)
             code.co_names = tuple(new_consts)
             main_code.code_objects[i] = code
@@ -82,23 +80,41 @@ def apply_changes(sender, data, user_data):
         refresh_co_code()
 
 
+def set_color(item, kind):
+    if kind == str:
+        dpg.bind_item_theme(item, str_theme)
+    elif kind in [int, float]:
+        dpg.bind_item_theme(item, int_theme)
+    elif kind == Exception:
+        dpg.bind_item_theme(item, exception_theme)
+    else:
+        dpg.bind_item_theme(item, unknown_theme)
+
+
 def get_repr(inst, code):
     if inst.opcode in dis.hasconst:
         try:
+            kind = type(code.co_consts[inst.arg])
             value = repr(code.co_consts[inst.arg])
         except IndexError:
+            kind = Exception
             value = "Invalid constant index"
     elif inst.opcode in dis.hasname:
         try:
+            kind = type(code.co_names[inst.arg])
             value = repr(code.co_names[inst.arg])
         except IndexError:
+            kind = Exception
             value = "Invalid names index"
     elif inst.opcode in dis.hascompare:
         try:
+            kind = type(code.co_names[inst.arg])
             value = dis.cmp_op[inst.arg]
         except IndexError:
+            kind = Exception
             value = "Invalid compare argument"
     elif inst.opcode == opcode.opmap["MAKE_FUNCTION"]:
+        kind = str
         value = ', '.join(s for i, s in enumerate(MAKE_FUNCTION_FLAGS)
                           if inst.arg & (1 << i))
 
@@ -107,18 +123,16 @@ def get_repr(inst, code):
 
     elif inst.opcode == opcode.opmap["FORMAT_VALUE"]:
         try:
-            value = FORMAT_VALUE_CONVERTERS[inst.arg & 0x3]
+            kind = str
+            value = FORMAT_VALUE_CONVERTERS[inst.arg & 0x3][1]
         except IndexError:
+            kind = Exception
             value = "Invalid format argument"
     else:
+        kind = None
         value = None
 
-    if value is None:
-        value = inst.arg
-    else:
-        value = f"{inst.arg:<5}({value})"
-
-    return value
+    return kind, value
 
 
 def find_code(uid):
@@ -157,7 +171,8 @@ def create_node(code, tree, parent, expand=False, tag=None, name=None):
     else:
         node_handlers = dpg.get_item_parent(tag + "_handler")
 
-    with dpg.tree_node(label=name if name else code.co_name, tag=tag, parent=parent, default_open=expand, open_on_arrow=True,
+    with dpg.tree_node(label=name if name else code.co_name, tag=tag, parent=parent, default_open=expand,
+                       open_on_arrow=True,
                        user_data=expand, leaf=True if not tree else False) as cur_tree:
         dpg.bind_item_handler_registry(cur_tree, node_handlers)
         if tree:
@@ -177,12 +192,20 @@ def load_co_code(code):
 
         for i, inst in enumerate(code.co_code):
             with dpg.table_row():
-                dpg.add_text(i * 2)
-                dpg.add_text(opcode.opname[inst.opcode], tag=f"code_{i * 2}")
+                index = dpg.add_text(i * 2)
+                dpg.bind_item_theme(index, index_theme)
+                op = dpg.add_text(opcode.opname[inst.opcode], tag=f"code_{i * 2}")
+                dpg.bind_item_theme(op, opcode_theme)
 
                 if inst.opcode >= opcode.HAVE_ARGUMENT:
-                    value = get_repr(inst, code)
-                    dpg.add_text(value, tag=f"code_{(i * 2) + 1}")
+                    kind, value = get_repr(inst, code)
+                    with dpg.group(horizontal=True, horizontal_spacing=30):
+                        arg = dpg.add_text(inst.arg)
+                        dpg.bind_item_theme(arg, arg_theme)
+
+                        text = dpg.add_text(value, tag=f"code_{(i * 2) + 1}")
+
+                        set_color(text, kind)
 
     dpg.bind_item_font(table, co_code_font)
 
@@ -194,8 +217,10 @@ def refresh_co_code():
         dpg.set_value(f"code_{i * 2}", opcode.opname[inst.opcode])
 
         if inst.opcode >= opcode.HAVE_ARGUMENT:
-            value = get_repr(inst, code)
+            kind, value = get_repr(inst, code)
             dpg.set_value(f"code_{(i * 2) + 1}", value)
+
+            set_color(f"code_{(i * 2) + 1}", kind)
 
 
 def load_co_consts(code):
@@ -249,6 +274,34 @@ with dpg.font_registry():
     co_consts_font = dpg.add_font("Roboto-Medium.ttf", 25 * 2)
     co_names_font = co_consts_font
 
+with dpg.theme() as opcode_theme:
+    with dpg.theme_component(dpg.mvText):
+        dpg.add_theme_color(dpg.mvThemeCol_Text, (152, 92, 133))
+
+with dpg.theme() as index_theme:
+    with dpg.theme_component(dpg.mvText):
+        dpg.add_theme_color(dpg.mvThemeCol_Text, (128, 111, 77))
+
+with dpg.theme() as str_theme:
+    with dpg.theme_component(dpg.mvText):
+        dpg.add_theme_color(dpg.mvThemeCol_Text, (214, 157, 133))
+
+with dpg.theme() as int_theme:
+    with dpg.theme_component(dpg.mvText):
+        dpg.add_theme_color(dpg.mvThemeCol_Text, (128, 111, 77))
+
+with dpg.theme() as arg_theme:
+    with dpg.theme_component(dpg.mvText):
+        dpg.add_theme_color(dpg.mvThemeCol_Text, (153, 101, 0))
+
+with dpg.theme() as exception_theme:
+    with dpg.theme_component(dpg.mvText):
+        dpg.add_theme_color(dpg.mvThemeCol_Text, (255, 85, 85))
+
+with dpg.theme() as unknown_theme:
+    with dpg.theme_component(dpg.mvText):
+        dpg.add_theme_color(dpg.mvThemeCol_Text, (86, 156, 214))
+
 
 def open_file(sender, app_data, user_data):
     global main_code
@@ -263,7 +316,8 @@ def open_file(sender, app_data, user_data):
     current_code = code.uid
 
     dpg.delete_item("code_objects_tree")
-    create_node(code, code.tree, "code_objects_window", expand=True, tag="code_objects_tree", name=os.path.splitext(os.path.basename(app_data['file_path_name']))[0])
+    create_node(code, code.tree, "code_objects_window", expand=True, tag="code_objects_tree",
+                name=os.path.basename(app_data['file_path_name']))
 
     load_code(code)
 
