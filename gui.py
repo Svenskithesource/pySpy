@@ -79,6 +79,16 @@ def apply_changes(sender, data, user_data):
 
         refresh_co_code()
 
+    elif sender.startswith("code_"):
+        index = int(sender.replace("code_", ""))
+        if index % 2 == 0:  # If it's an index
+            if current_code == main_code.uid:
+                main_code.co_code[index // 2].opcode = opcode.opmap[data]
+            else:
+                i, code = find_code(current_code)
+                code.co_code[index // 2].opcode = opcode.opmap[data]
+                main_code.code_objects[i] = code
+
 
 def set_color(item, kind):
     if kind == str:
@@ -108,7 +118,7 @@ def get_repr(inst, code):
             value = "Invalid names index"
     elif inst.opcode in dis.hascompare:
         try:
-            kind = type(code.co_names[inst.arg])
+            kind = str
             value = dis.cmp_op[inst.arg]
         except IndexError:
             kind = Exception
@@ -130,7 +140,7 @@ def get_repr(inst, code):
             value = "Invalid format argument"
     else:
         kind = None
-        value = None
+        value = ""
 
     return kind, value
 
@@ -180,36 +190,6 @@ def create_node(code, tree, parent, expand=False, tag=None, name=None):
                 create_node(obj, obj_tree, tag)
 
 
-def load_co_code(code):
-    dpg.delete_item("co_code_table")
-    with dpg.table(tag="co_code_table", header_row=True, row_background=False,
-                   policy=dpg.mvTable_SizingFixedFit,
-                   borders_innerH=True, borders_outerH=True, borders_innerV=True,
-                   borders_outerV=True, parent="co_code_window", scrollX=True) as table:
-        dpg.add_table_column(label="Index")
-        dpg.add_table_column(label="Opcode")
-        dpg.add_table_column(label="Argument")
-
-        for i, inst in enumerate(code.co_code):
-            with dpg.table_row():
-                index = dpg.add_text(i * 2)
-                dpg.bind_item_theme(index, index_theme)
-                op = dpg.add_text(opcode.opname[inst.opcode], tag=f"code_{i * 2}")
-                dpg.bind_item_theme(op, opcode_theme)
-
-                if inst.opcode >= opcode.HAVE_ARGUMENT:
-                    kind, value = get_repr(inst, code)
-                    with dpg.group(horizontal=True, horizontal_spacing=30):
-                        arg = dpg.add_text(inst.arg)
-                        dpg.bind_item_theme(arg, arg_theme)
-
-                        text = dpg.add_text(value, tag=f"code_{(i * 2) + 1}")
-
-                        set_color(text, kind)
-
-    dpg.bind_item_font(table, co_code_font)
-
-
 # The differences with load_ and refresh_ is that refresh_ actually updates the items inplace and load_ resets and re-adds
 def refresh_co_code():
     _, code = find_code(current_code)
@@ -221,6 +201,38 @@ def refresh_co_code():
             dpg.set_value(f"code_{(i * 2) + 1}", value)
 
             set_color(f"code_{(i * 2) + 1}", kind)
+
+
+def load_co_code(code):
+    dpg.delete_item("co_code_table")
+    with dpg.table(tag="co_code_table", header_row=True, row_background=False,
+                   policy=dpg.mvTable_SizingFixedFit,
+                   borders_innerH=True, borders_outerH=True, borders_innerV=True,
+                   borders_outerV=True, parent="co_code_window", scrollX=True) as table:
+        dpg.add_table_column(label="Index")
+        dpg.add_table_column(label="Opcode", init_width_or_weight=250)
+        dpg.add_table_column(label="Argument")
+
+        for i, inst in enumerate(code.co_code):
+            with dpg.table_row():
+                index = dpg.add_text(i * 2)
+                dpg.bind_item_theme(index, index_theme)
+                op = dpg.add_combo(list(opcode.opmap.keys()), default_value=opcode.opname[inst.opcode],
+                                   tag=f"code_{i * 2}", callback=apply_changes, width=250)
+                dpg.bind_item_theme(op, opcode_theme)
+
+                if inst.opcode >= opcode.HAVE_ARGUMENT:
+                    kind, value = get_repr(inst, code)
+
+                    with dpg.group(horizontal=True, horizontal_spacing=30):
+                        arg = dpg.add_text(inst.arg)
+                        dpg.bind_item_theme(arg, arg_theme)
+
+                        text = dpg.add_text(value, tag=f"code_{(i * 2) + 1}")
+
+                        set_color(text, kind)
+
+    dpg.bind_item_font(table, co_code_font)
 
 
 def load_co_consts(code):
