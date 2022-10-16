@@ -24,10 +24,6 @@ main_code = None
 current_code = None
 
 
-def save_init(sender):
-    dpg.save_init_file("dpg.ini")
-
-
 def export(sender, data):
     file = open(data['file_path_name'], "wb")
     header = bytes(importlib.util.MAGIC_NUMBER).ljust(16, b"\x00")
@@ -236,7 +232,7 @@ def load_co_code(code):
 
                     with dpg.group(horizontal=True, horizontal_spacing=30):
                         arg = dpg.add_input_int(default_value=inst.arg, tag=f"arg_{(i * 2) + 1}",
-                                                 callback=apply_changes, on_enter=True)
+                                                callback=apply_changes, on_enter=True, width=250)
                         dpg.bind_item_theme(arg, arg_theme)
 
                         text = dpg.add_text(value, tag=f"code_{(i * 2) + 1}")
@@ -356,7 +352,6 @@ with dpg.file_dialog(directory_selector=False, show=False, file_count=1, callbac
 with dpg.viewport_menu_bar():
     with dpg.menu(label="File"):
         dpg.add_menu_item(label="Open", callback=lambda: dpg.show_item("select_file"))
-        dpg.add_menu_item(label="Save layout", callback=save_init)
         dpg.add_menu_item(label="Export .pyc file", callback=lambda: dpg.show_item("save_file"))
 
 with dpg.window(label="Instructions", tag="co_code_window", no_close=True):
