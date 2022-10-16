@@ -288,9 +288,9 @@ def load_code(code):
 dpg.create_context()
 
 with dpg.font_registry():
-    default_font = dpg.add_font("Roboto-Medium.ttf", 20 * 2)
-    co_code_font = dpg.add_font("RobotoMono-Medium.ttf", 30 * 2)
-    co_consts_font = dpg.add_font("Roboto-Medium.ttf", 25 * 2)
+    default_font = dpg.add_font("resources/Roboto-Medium.ttf", 20 * 2)
+    co_code_font = dpg.add_font("resources/RobotoMono-Medium.ttf", 30 * 2)
+    co_consts_font = dpg.add_font("resources/Roboto-Medium.ttf", 25 * 2)
     co_names_font = co_consts_font
 
 with dpg.theme() as opcode_theme:
