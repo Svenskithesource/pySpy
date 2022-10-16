@@ -79,8 +79,8 @@ def apply_changes(sender, data, user_data):
 
         refresh_co_code()
 
-    elif sender.startswith("code_"):
-        index = int(sender.replace("code_", ""))
+    elif sender.startswith("code_") or sender.startswith("arg_"):
+        index = int(sender.replace("code_", "")) if "code_" in sender else int(sender.replace("arg_", ""))
         if index % 2 == 0:  # If it's an index
             if current_code == main_code.uid:
                 main_code.co_code[index // 2].opcode = opcode.opmap[data]
@@ -88,6 +88,15 @@ def apply_changes(sender, data, user_data):
                 i, code = find_code(current_code)
                 code.co_code[index // 2].opcode = opcode.opmap[data]
                 main_code.code_objects[i] = code
+        else:
+            if current_code == main_code.uid:
+                main_code.co_code[(index - 1) // 2].arg = data
+            else:
+                i, code = find_code(current_code)
+                code.co_code[(index - 1) // 2].arg = data
+                main_code.code_objects[i] = code
+
+        refresh_co_code()
 
 
 def set_color(item, kind):
@@ -197,6 +206,7 @@ def refresh_co_code():
         dpg.set_value(f"code_{i * 2}", opcode.opname[inst.opcode])
 
         if inst.opcode >= opcode.HAVE_ARGUMENT:
+            dpg.set_value(f"arg_{(i * 2) + 1}", inst.arg)
             kind, value = get_repr(inst, code)
             dpg.set_value(f"code_{(i * 2) + 1}", value)
 
@@ -225,7 +235,8 @@ def load_co_code(code):
                     kind, value = get_repr(inst, code)
 
                     with dpg.group(horizontal=True, horizontal_spacing=30):
-                        arg = dpg.add_text(inst.arg)
+                        arg = dpg.add_input_int(default_value=inst.arg, tag=f"arg_{(i * 2) + 1}",
+                                                 callback=apply_changes, on_enter=True)
                         dpg.bind_item_theme(arg, arg_theme)
 
                         text = dpg.add_text(value, tag=f"code_{(i * 2) + 1}")
