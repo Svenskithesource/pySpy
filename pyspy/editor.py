@@ -88,7 +88,6 @@ class Code:
                 extended_args, new_arg = calculate_extended_args(inst.arg)
 
                 for extended_arg in extended_args:
-                    print("used")
                     new.append(EXTENDED_ARG)
                     new.append(extended_arg)
 
@@ -109,7 +108,7 @@ class Code:
             if isinstance(const, Code):
                 code_objects = own_copy.code_objects if getattr(own_copy, "code_objects", None) else code_objects
                 code = [e for e in code_objects if str(const.uid) == str(e.uid)]
-                const = code[0].to_native()
+                const = code[0].to_native(code_objects=code_objects)
 
             new_consts.append(const)
 
