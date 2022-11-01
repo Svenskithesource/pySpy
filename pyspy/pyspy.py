@@ -193,27 +193,26 @@ def find_code(uid, is_file=False):
 
 def open_code_handler(sender, data):
     # Ignore when it's not left-click
-    if data[0]:
-        return
+    if not data[0]:
 
-    object_id = data[1]
+        object_id = data[1]
 
-    dpg.configure_item(data[1], user_data=dpg.get_value(data[1]))
-    # Ignore when clicked in the arrow
-    if dpg.get_item_configuration(object_id)["user_data"] != dpg.get_value(object_id):
-        return
+        # Ignore when clicked in the arrow
+        if dpg.get_item_configuration(object_id)["user_data"] == dpg.get_value(object_id):
 
-    global current_file
-    uid = object_id.split('tree_')[1]
-    is_file = "code_objects_tree" in object_id
-    _, code = find_code(uid, is_file)
+            global current_file
+            uid = object_id.split('tree_')[1]
+            is_file = "code_objects_tree" in object_id
+            _, code = find_code(uid, is_file)
 
-    if is_file:
-        current_file = code
+            if is_file:
+                current_file = code
 
-    global current_code_id
-    current_code_id = code.uid
-    load_code(code)
+            global current_code_id
+            current_code_id = code.uid
+            load_code(code)
+
+        dpg.configure_item(data[1], user_data=dpg.get_value(data[1]))
 
 
 def create_node(code, tree, parent, expand=False, tag=None, name=None):
@@ -333,7 +332,7 @@ def load_code(code):
 def create_file_dialog(id, path, callback):
     try:
         dpg.delete_item(id)
-    except:
+    except SystemError:
         pass
 
     with dpg.file_dialog(directory_selector=False, default_path=path, show=False, callback=callback, tag=id, id=id,
@@ -395,21 +394,25 @@ def open_file(sender, app_data, user_data):
     load_file_dialogs(app_data['current_path'])
     selected_files = list(app_data['selections'].values())
 
+    existing_files = [os.path.basename(file.co_filename) for file in file_codes]
+    print(dpg.get_item_configuration(list(dpg.get_item_children("code_objects_window").values())[1][0]))
+
     for file_name in selected_files:
-        file = open(file_name, "rb")
-        file.seek(16)  # Skip the pyc header
-        code = marshal.loads(file.read())
+        if os.path.basename(file_name) not in existing_files:
+            file = open(file_name, "rb")
+            file.seek(16)  # Skip the pyc header
+            code = marshal.loads(file.read())
 
-        code = editor.code2custom(code)
+            code = editor.code2custom(code)
 
-        file_codes.append(code)
-        current_file = code
-        current_code_id = code.uid
+            file_codes.append(code)
+            current_file = code
+            current_code_id = code.uid
 
-        create_node(code, code.tree, "code_objects_window", expand=True, tag=f"code_objects_tree_{code.uid}",
-                    name=os.path.basename(file_name))
+            create_node(code, code.tree, "code_objects_window", expand=True, tag=f"code_objects_tree_{code.uid}",
+                        name=os.path.basename(file_name))
 
-        load_code(code)
+            load_code(code)
 
 
 load_file_dialogs(os.path.dirname(__file__))
