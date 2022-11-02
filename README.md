@@ -13,9 +13,7 @@ It uses an internal module to edit the bytecode, which handles all the convertin
 ## How to use
 `pip install -r requirements.txt`
 
-`cd pyspy`
-
-`python3 pyspy.py`
+`python3 pyspy`
 
 ## Missing features
 There are a lot of opportunities to make this better, for example:

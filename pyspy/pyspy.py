@@ -20,19 +20,23 @@ FORMAT_VALUE_CONVERTERS = (
 
 MAKE_FUNCTION_FLAGS = ('defaults', 'kwdefaults', 'annotations', 'closure')
 
-main_code = None
-current_code = None
+current_file = None
+current_code_id = None
+file_codes = []
+last_directory = None
 
 
 def export(sender, data):
+    load_file_dialogs(data['current_path'])
+
     file = open(data['file_path_name'], "wb")
     header = bytes(importlib.util.MAGIC_NUMBER).ljust(16, b"\x00")
 
-    file.write(header + marshal.dumps(main_code.to_native()))
+    file.write(header + marshal.dumps(current_file.to_native()))
 
 
 def apply_changes(sender, data, user_data):
-    global main_code
+    global current_file
     if user_data == "co_names_apply":
         new_names = []
 
@@ -45,12 +49,12 @@ def apply_changes(sender, data, user_data):
             new_names.append(value)
             i += 1
 
-        if current_code == main_code.uid:
-            main_code.co_names = tuple(new_names)
+        if str(current_code_id) == str(current_file.uid):
+            current_file.co_names = tuple(new_names)
         else:
-            i, code = find_code(current_code)
+            i, code = find_code(current_code_id)
             code.co_names = tuple(new_names)
-            main_code.code_objects[i] = code
+            current_file.code_objects[i] = code
 
         refresh_co_code()
 
@@ -66,31 +70,32 @@ def apply_changes(sender, data, user_data):
             new_consts.append(ast.literal_eval(value))
             i += 1
 
-        if current_code == main_code.uid:
-            main_code.co_consts = tuple(new_consts)
+        if str(current_code_id) == str(current_file.uid):
+            current_file.co_consts = tuple(new_consts)
         else:
-            i, code = find_code(current_code)
+            i, code = find_code(current_code_id)
             code.co_names = tuple(new_consts)
-            main_code.code_objects[i] = code
+            current_file.code_objects[i] = code
 
         refresh_co_code()
 
     elif sender.startswith("code_") or sender.startswith("arg_"):
-        index = int(sender.replace("code_", "")) if "code_" in sender else int(sender.replace("arg_", ""))
+        index = int(sender.replace("code_", "")) if "code_" in sender else int(
+            sender.replace("arg_", ""))
         if index % 2 == 0:  # If it's an index
-            if current_code == main_code.uid:
-                main_code.co_code[index // 2].opcode = opcode.opmap[data]
+            if str(current_code_id) == str(current_file.uid):
+                current_file.co_code[index // 2].opcode = opcode.opmap[data]
             else:
-                i, code = find_code(current_code)
+                i, code = find_code(current_code_id)
                 code.co_code[index // 2].opcode = opcode.opmap[data]
-                main_code.code_objects[i] = code
+                current_file.code_objects[i] = code
         else:
-            if current_code == main_code.uid:
-                main_code.co_code[(index - 1) // 2].arg = data
+            if str(current_code_id) == str(current_file.uid):
+                current_file.co_code[(index - 1) // 2].arg = data
             else:
-                i, code = find_code(current_code)
+                i, code = find_code(current_code_id)
                 code.co_code[(index - 1) // 2].arg = data
-                main_code.code_objects[i] = code
+                current_file.code_objects[i] = code
 
         refresh_co_code()
 
@@ -150,25 +155,61 @@ def get_repr(inst, code):
     return kind, value
 
 
-def find_code(uid):
-    if uid == main_code.uid:
-        return 0, main_code
-    code = [(i, e) for i, e in enumerate(main_code.code_objects) if str(e.uid) == str(uid)]
+def get_file_code_by_id(uid):
+    for file in file_codes:
+        if str(uid) == str(file.uid):
+            return file
 
-    if len(code) != 1:
-        print(f"UID ({uid}) was found {len(code)} times")
-    else:
-        return code[0]
+
+def search_code_recursively(child_uid):
+    for file in file_codes:
+        codes = [(i, e) for i, e in enumerate(
+            file.code_objects) if str(e.uid) == str(child_uid)]
+
+        if len(codes) != 1:
+            continue
+
+        global current_file
+        current_file = file
+
+        return codes[0]
+
+
+def find_code(uid, is_file=False):
+    if is_file or str(current_file.uid) == str(uid):
+        return 0, get_file_code_by_id(uid)
+
+    codes_found = [(i, e) for i, e in enumerate(
+        current_file.code_objects) if str(e.uid) == str(uid)]
+
+    if len(codes_found) == 1:
+        return codes_found[0]
+
+    if len(codes_found) == 0:
+        return search_code_recursively(uid)
+
+    print(f"UID ({uid}) was found {len(codes_found)} times")
 
 
 def open_code_handler(sender, data):
-    if not data[0]:  # Only when left-clicked
-        global current_code
-        if dpg.get_item_configuration(data[1])["user_data"] == dpg.get_value(
-                data[1]):  # Only trigger if the element was clicked without the arrow
-            uid = main_code.uid if "code_objects_tree" in data[1] else data[1].replace("tree_", "")
-            _, code = find_code(uid)
-            current_code = code.uid
+    # Ignore when it's not left-click
+    if not data[0]:
+
+        object_id = data[1]
+
+        # Ignore when clicked in the arrow
+        if dpg.get_item_configuration(object_id)["user_data"] == dpg.get_value(object_id):
+
+            global current_file
+            uid = object_id.split('tree_')[1]
+            is_file = "code_objects_tree" in object_id
+            _, code = find_code(uid, is_file)
+
+            if is_file:
+                current_file = code
+
+            global current_code_id
+            current_code_id = code.uid
             load_code(code)
 
         dpg.configure_item(data[1], user_data=dpg.get_value(data[1]))
@@ -182,22 +223,25 @@ def create_node(code, tree, parent, expand=False, tag=None, name=None):
     if not skip:
         node_handlers = dpg.add_item_handler_registry()
 
-        dpg.add_item_clicked_handler(tag=tag + "_handler", parent=node_handlers, callback=open_code_handler)
+        dpg.add_item_clicked_handler(
+            tag=tag + "_handler", parent=node_handlers, callback=open_code_handler)
     else:
         node_handlers = dpg.get_item_parent(tag + "_handler")
 
     with dpg.tree_node(label=name if name else code.co_name, tag=tag, parent=parent, default_open=expand,
                        open_on_arrow=True,
                        user_data=expand, leaf=True if not tree else False) as cur_tree:
+
         dpg.bind_item_handler_registry(cur_tree, node_handlers)
         if tree:
             for obj, obj_tree in tree.items():
                 create_node(obj, obj_tree, tag)
 
 
-# The differences with load_ and refresh_ is that refresh_ actually updates the items inplace and load_ resets and re-adds
+# The differences with load_ and refresh_ is that refresh_ actually updates the items inplace and load_ resets and
+# re-adds
 def refresh_co_code():
-    _, code = find_code(current_code)
+    _, code = find_code(current_code_id)
     for i, inst in enumerate(code.co_code):
         dpg.set_value(f"code_{i * 2}", opcode.opname[inst.opcode])
 
@@ -223,7 +267,7 @@ def load_co_code(code):
             with dpg.table_row():
                 index = dpg.add_text(i * 2)
                 dpg.bind_item_theme(index, index_theme)
-                op = dpg.add_combo(list(opcode.opmap.keys()), default_value=opcode.opname[inst.opcode],
+                op = dpg.add_combo(list(sorted(opcode.opmap.keys())), default_value=opcode.opname[inst.opcode],
                                    tag=f"code_{i * 2}", callback=apply_changes, width=250)
                 dpg.bind_item_theme(op, opcode_theme)
 
@@ -285,6 +329,27 @@ def load_code(code):
     load_co_names(code)
 
 
+def create_file_dialog(id, path, callback):
+    try:
+        dpg.delete_item(id)
+    except SystemError:
+        pass
+
+    with dpg.file_dialog(directory_selector=False, default_path=path, show=False, callback=callback, tag=id, id=id,
+                         width=800, height=400):
+        dpg.add_file_extension(".pyc", color=(0, 255, 0, 255))
+
+
+def load_file_dialogs(path):
+    global last_directory
+    if path == last_directory:
+        return
+
+    last_directory = path
+    create_file_dialog('select_file', path, open_file)
+    create_file_dialog('save_file', path, export)
+
+
 dpg.create_context()
 
 with dpg.font_registry():
@@ -323,36 +388,41 @@ with dpg.theme() as unknown_theme:
 
 
 def open_file(sender, app_data, user_data):
-    global main_code
-    global current_code
-    file = open(app_data['file_path_name'], "rb")
-    file.seek(16)  # Skip the pyc header
-    code = marshal.loads(file.read())
+    global current_file
+    global current_code_id
 
-    code = editor.code2custom(code)
+    load_file_dialogs(app_data['current_path'])
+    selected_files = list(app_data['selections'].values())
 
-    main_code = code
-    current_code = code.uid
+    existing_files = [os.path.basename(file.co_filename) for file in file_codes]
+    print(dpg.get_item_configuration(list(dpg.get_item_children("code_objects_window").values())[1][0]))
 
-    dpg.delete_item("code_objects_tree")
-    create_node(code, code.tree, "code_objects_window", expand=True, tag="code_objects_tree",
-                name=os.path.basename(app_data['file_path_name']))
+    for file_name in selected_files:
+        if os.path.basename(file_name) not in existing_files:
+            file = open(file_name, "rb")
+            file.seek(16)  # Skip the pyc header
+            code = marshal.loads(file.read())
 
-    load_code(code)
+            code = editor.code2custom(code)
+
+            file_codes.append(code)
+            current_file = code
+            current_code_id = code.uid
+
+            create_node(code, code.tree, "code_objects_window", expand=True, tag=f"code_objects_tree_{code.uid}",
+                        name=os.path.basename(file_name))
+
+            load_code(code)
 
 
-with dpg.file_dialog(directory_selector=False, show=False, file_count=1, callback=open_file, id="select_file",
-                     width=800, height=400):
-    dpg.add_file_extension(".pyc", color=(0, 255, 0, 255))
-
-with dpg.file_dialog(directory_selector=False, show=False, file_count=1, callback=export, id="save_file",
-                     width=800, height=400):
-    dpg.add_file_extension(".pyc", color=(0, 255, 0, 255))
+load_file_dialogs(os.path.dirname(__file__))
 
 with dpg.viewport_menu_bar():
     with dpg.menu(label="File"):
-        dpg.add_menu_item(label="Open", callback=lambda: dpg.show_item("select_file"))
-        dpg.add_menu_item(label="Export .pyc file", callback=lambda: dpg.show_item("save_file"))
+        dpg.add_menu_item(
+            label="Open", callback=lambda: dpg.show_item("select_file"))
+        dpg.add_menu_item(label="Export .pyc file",
+                          callback=lambda: dpg.show_item("save_file"))
 
 with dpg.window(label="Instructions", tag="co_code_window", no_close=True):
     with dpg.table(tag="co_code_table", header_row=True, row_background=False, policy=dpg.mvTable_SizingFixedFit,
@@ -383,7 +453,7 @@ with dpg.window(label="Names", tag="co_names_window", no_close=True):
     dpg.bind_item_font(table, co_names_font)
 
 with dpg.window(label="Code Objects", tag="code_objects_window", no_close=True):
-    tree = dpg.add_tree_node(tag="code_objects_tree")
+    tree = dpg.add_tree_node(tag="code_objects_tree", show=False)
 
     dpg.bind_item_font(tree, default_font)
 
