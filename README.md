@@ -19,8 +19,8 @@ It uses an internal module to edit the bytecode, which handles all the convertin
 There are a lot of opportunities to make this better, for example:
 - A debugger
 - Create new code objects
-- Add constants
-- Add names
+- ~~Add constants~~ Added
+- ~~Add names~~ Added
 - Add new instructions
 - Plugin support
 

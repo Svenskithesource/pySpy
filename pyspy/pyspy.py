@@ -100,6 +100,34 @@ def apply_changes(sender, data, user_data):
         refresh_co_code()
 
 
+def co_names_add(sender):
+    if current_file:
+        value = ""
+        current_file.co_names = list(current_file.co_names)
+        current_file.co_names.append(value)
+        current_file.co_names = tuple(current_file.co_names)
+        index = len(current_file.co_names) - 1
+
+        with dpg.table_row(parent="co_names_table") as row:
+            dpg.add_text(index)
+            dpg.add_input_text(default_value=value, tag=f"name_{index}", width=400, user_data="co_names_apply",
+                               callback=apply_changes, on_enter=True)
+
+
+def co_consts_add(sender):
+    if current_file:
+        value = ""
+        current_file.co_names = list(current_file.co_consts)
+        current_file.co_consts.append(value)
+        current_file.co_names = tuple(current_file.co_consts)
+        index = len(current_file.co_consts) - 1
+
+        with dpg.table_row(parent="co_consts_table") as row:
+            dpg.add_text(index)
+            dpg.add_input_text(default_value=value, tag=f"consts_{index}", width=400, user_data="co_consts_apply",
+                               callback=apply_changes, on_enter=True)
+
+
 def set_color(item, kind):
     if kind == str:
         dpg.bind_item_theme(item, str_theme)
@@ -395,7 +423,6 @@ def open_file(sender, app_data, user_data):
     selected_files = list(app_data['selections'].values())
 
     existing_files = [os.path.basename(file.co_filename) for file in file_codes]
-    print(dpg.get_item_configuration(list(dpg.get_item_children("code_objects_window").values())[1][0]))
 
     for file_name in selected_files:
         if os.path.basename(file_name) not in existing_files:
@@ -435,6 +462,8 @@ with dpg.window(label="Instructions", tag="co_code_window", no_close=True):
     dpg.bind_item_font(table, co_code_font)
 
 with dpg.window(label="Constants", tag="co_consts_window", no_close=True):
+    with dpg.menu_bar():
+        dpg.add_button(label="Add", tag="co_consts_add", callback=co_consts_add)
     with dpg.table(tag="co_consts_table", header_row=True, row_background=False, policy=dpg.mvTable_SizingFixedFit,
                    borders_innerH=True, borders_outerH=True, borders_innerV=True,
                    borders_outerV=True) as table:
@@ -444,6 +473,8 @@ with dpg.window(label="Constants", tag="co_consts_window", no_close=True):
     dpg.bind_item_font(table, co_consts_font)
 
 with dpg.window(label="Names", tag="co_names_window", no_close=True):
+    with dpg.menu_bar():
+        dpg.add_button(label="Add", tag="co_names_add", callback=co_names_add)
     with dpg.table(tag="co_names_table", header_row=True, row_background=False, policy=dpg.mvTable_SizingFixedFit,
                    borders_innerH=True, borders_outerH=True, borders_innerV=True,
                    borders_outerV=True) as table:
