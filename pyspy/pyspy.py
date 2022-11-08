@@ -35,97 +35,97 @@ def export(sender, data):
     file.write(header + marshal.dumps(current_file.to_native()))
 
 
-def apply_changes(sender, data, user_data):
+def get_new_values(prefix):
+    new_values = []
+    i = 0
+    while True:
+        value = dpg.get_value(f"{prefix}_{i}")
+        if value is None:
+            break
+
+        new_values.append(value)
+        i += 1
+
+    return new_values
+
+
+def get_literal_const(value, index):
+    return current_file.co_consts[index] if '<Code object' in value else ast.literal_eval(value)
+
+
+def apply_name_changes():
     global current_file
-    if user_data == "co_names_apply":
-        new_names = []
+    new_names = get_new_values("name")
 
-        i = 0
-        while True:
-            value = dpg.get_value(f"name_{i}")
-            if value is None:
-                break
+    current_file.co_names = tuple(new_names)
+    refresh_co_code()
 
-            new_names.append(value)
-            i += 1
 
+def apply_const_changes():
+    global current_file
+    new_consts = get_new_values("const")
+
+    new_consts = [get_literal_const(value, index)
+                  for index, value in enumerate(new_consts)]
+                  
+    current_file.co_consts = tuple(new_consts)
+    refresh_co_code()
+
+
+def apply_code_changes(sender, data):
+    global current_file
+    index = int(sender.replace("code_", "")) if "code_" in sender else int(
+        sender.replace("arg_", ""))
+    if index % 2 == 0:  # If it's an index
         if str(current_code_id) == str(current_file.uid):
-            current_file.co_names = tuple(new_names)
+            current_file.co_code[index // 2].opcode = opcode.opmap[data]
         else:
             i, code = find_code(current_code_id)
-            code.co_names = tuple(new_names)
+            code.co_code[index // 2].opcode = opcode.opmap[data]
             current_file.code_objects[i] = code
-
-        refresh_co_code()
-
-    elif user_data == "co_consts_apply":
-        new_consts = []
-
-        i = 0
-        while True:
-            value = dpg.get_value(f"const_{i}")
-            if value is None:
-                break
-
-            new_consts.append(ast.literal_eval(value))
-            i += 1
-
+    else:
         if str(current_code_id) == str(current_file.uid):
-            current_file.co_consts = tuple(new_consts)
+            current_file.co_code[(index - 1) // 2].arg = data
         else:
             i, code = find_code(current_code_id)
-            code.co_names = tuple(new_consts)
+            code.co_code[(index - 1) // 2].arg = data
             current_file.code_objects[i] = code
 
-        refresh_co_code()
-
-    elif sender.startswith("code_") or sender.startswith("arg_"):
-        index = int(sender.replace("code_", "")) if "code_" in sender else int(
-            sender.replace("arg_", ""))
-        if index % 2 == 0:  # If it's an index
-            if str(current_code_id) == str(current_file.uid):
-                current_file.co_code[index // 2].opcode = opcode.opmap[data]
-            else:
-                i, code = find_code(current_code_id)
-                code.co_code[index // 2].opcode = opcode.opmap[data]
-                current_file.code_objects[i] = code
-        else:
-            if str(current_code_id) == str(current_file.uid):
-                current_file.co_code[(index - 1) // 2].arg = data
-            else:
-                i, code = find_code(current_code_id)
-                code.co_code[(index - 1) // 2].arg = data
-                current_file.code_objects[i] = code
-
-        refresh_co_code()
+    refresh_co_code()
 
 
-def co_names_add(sender):
-    if current_file:
-        value = ""
-        current_file.co_names = list(current_file.co_names)
-        current_file.co_names.append(value)
-        current_file.co_names = tuple(current_file.co_names)
-        index = len(current_file.co_names) - 1
+def co_names_add():
+    if current_file is None:
+        return
 
-        with dpg.table_row(parent="co_names_table") as row:
-            dpg.add_text(index)
-            dpg.add_input_text(default_value=value, tag=f"name_{index}", width=400, user_data="co_names_apply",
-                               callback=apply_changes, on_enter=True)
+    value = ""
+    names = list(current_file.co_names)
+    names.append(value)
+
+    current_file.co_names = tuple(names)
+    index = len(current_file.co_names) - 1
+
+    with dpg.table_row(parent="co_names_table"):
+        dpg.add_text(index)
+        dpg.add_input_text(default_value=value, tag=f"name_{index}", width=400,
+                           callback=apply_name_changes, on_enter=True)
 
 
-def co_consts_add(sender):
-    if current_file:
-        value = ""
-        current_file.co_names = list(current_file.co_consts)
-        current_file.co_consts.append(value)
-        current_file.co_names = tuple(current_file.co_consts)
-        index = len(current_file.co_consts) - 1
+def co_consts_add():
+    if current_file is None:
+        return
 
-        with dpg.table_row(parent="co_consts_table") as row:
-            dpg.add_text(index)
-            dpg.add_input_text(default_value=value, tag=f"consts_{index}", width=400, user_data="co_consts_apply",
-                               callback=apply_changes, on_enter=True)
+    value = ""
+    consts = list(current_file.co_consts)
+    consts.append(value)
+
+    current_file.co_consts = tuple(consts)
+    index = len(current_file.co_consts) - 1
+
+    with dpg.table_row(parent="co_consts_table"):
+        dpg.add_text(index)
+        dpg.add_input_text(default_value=value, tag=f"const_{index}", width=400,
+                           callback=apply_const_changes, on_enter=True)
 
 
 def set_color(item, kind):
@@ -296,7 +296,7 @@ def load_co_code(code):
                 index = dpg.add_text(i * 2)
                 dpg.bind_item_theme(index, index_theme)
                 op = dpg.add_combo(list(sorted(opcode.opmap.keys())), default_value=opcode.opname[inst.opcode],
-                                   tag=f"code_{i * 2}", callback=apply_changes, width=250)
+                                   tag=f"code_{i * 2}", callback=apply_code_changes, width=250)
                 dpg.bind_item_theme(op, opcode_theme)
 
                 if inst.opcode >= opcode.HAVE_ARGUMENT:
@@ -304,7 +304,7 @@ def load_co_code(code):
 
                     with dpg.group(horizontal=True, horizontal_spacing=30):
                         arg = dpg.add_input_int(default_value=inst.arg, tag=f"arg_{(i * 2) + 1}",
-                                                callback=apply_changes, on_enter=True, width=250)
+                                                callback=apply_code_changes, on_enter=True, width=250)
                         dpg.bind_item_theme(arg, arg_theme)
 
                         text = dpg.add_text(value, tag=f"code_{(i * 2) + 1}")
@@ -323,11 +323,13 @@ def load_co_consts(code):
         dpg.add_table_column(label="Value")
 
         for index, value in enumerate(code.co_consts):
-            if not isinstance(value, types.CodeType) and not isinstance(value, editor.Code):
-                with dpg.table_row():
-                    dpg.add_text(index)
-                    dpg.add_input_text(default_value=repr(value), tag=f"const_{index}", width=400,
-                                       user_data="co_consts_apply", callback=apply_changes, on_enter=True)
+            can_edit = not isinstance(
+                value, types.CodeType) and not isinstance(value, editor.Code)
+
+            with dpg.table_row():
+                dpg.add_text(index)
+                dpg.add_input_text(default_value=repr(value), tag=f"const_{index}", width=400, enabled=can_edit,
+                                   user_data="co_consts_apply", callback=apply_const_changes, on_enter=True)
 
     dpg.bind_item_font(table, co_consts_font)
 
@@ -338,13 +340,13 @@ def load_co_names(code):
                    borders_innerH=True, borders_outerH=True, borders_innerV=True,
                    borders_outerV=True, parent="co_names_window", scrollX=True) as table:
         dpg.add_table_column(label="Index")
-        value_col = dpg.add_table_column(label="Value")
+        dpg.add_table_column(label="Value")
 
         for index, value in enumerate(code.co_names):
             with dpg.table_row() as row:
                 dpg.add_text(index)
                 dpg.add_input_text(default_value=value, tag=f"name_{index}", width=400, user_data="co_names_apply",
-                                   callback=apply_changes, on_enter=True)
+                                   callback=apply_name_changes, on_enter=True)
 
     dpg.bind_item_font(table, co_names_font)
 
@@ -422,7 +424,8 @@ def open_file(sender, app_data, user_data):
     load_file_dialogs(app_data['current_path'])
     selected_files = list(app_data['selections'].values())
 
-    existing_files = [os.path.basename(file.co_filename) for file in file_codes]
+    existing_files = [os.path.basename(file.co_filename)
+                      for file in file_codes]
 
     for file_name in selected_files:
         if os.path.basename(file_name) not in existing_files:
@@ -463,7 +466,8 @@ with dpg.window(label="Instructions", tag="co_code_window", no_close=True):
 
 with dpg.window(label="Constants", tag="co_consts_window", no_close=True):
     with dpg.menu_bar():
-        dpg.add_button(label="Add", tag="co_consts_add", callback=co_consts_add)
+        dpg.add_button(label="Add", tag="co_consts_add",
+                       callback=co_consts_add)
     with dpg.table(tag="co_consts_table", header_row=True, row_background=False, policy=dpg.mvTable_SizingFixedFit,
                    borders_innerH=True, borders_outerH=True, borders_innerV=True,
                    borders_outerV=True) as table:
