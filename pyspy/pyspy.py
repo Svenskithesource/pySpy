@@ -81,7 +81,6 @@ def apply_const_changes():
         code.co_consts = tuple(new_consts) 
         current_file.code_objects[i] = code 
                   
-    current_file.co_consts = tuple(new_consts)
     refresh_co_code()
 
 
