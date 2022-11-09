@@ -57,7 +57,13 @@ def apply_name_changes():
     global current_file
     new_names = get_new_values("name")
 
-    current_file.co_names = tuple(new_names)
+    if str(current_code_id) == str(current_file.uid): 
+        current_file.co_names = tuple(new_names) 
+    else: 
+        i, code = find_code(current_code_id) 
+        code.co_names = tuple(new_names) 
+        current_file.code_objects[i] = code 
+
     refresh_co_code()
 
 
@@ -67,6 +73,13 @@ def apply_const_changes():
 
     new_consts = [get_literal_const(value, index)
                   for index, value in enumerate(new_consts)]
+
+    if str(current_code_id) == str(current_file.uid): 
+        current_file.co_consts = tuple(new_consts) 
+    else: 
+        i, code = find_code(current_code_id) 
+        code.co_consts = tuple(new_consts) 
+        current_file.code_objects[i] = code 
                   
     current_file.co_consts = tuple(new_consts)
     refresh_co_code()
