@@ -1,5 +1,5 @@
 import opcode, uuid, dis, copy
-import typing, types
+import typing, types, inspect
 
 EXTENDED_ARG = opcode.opmap["EXTENDED_ARG"]
 
@@ -40,10 +40,10 @@ def calculate_extended_args(arg):
                 extended_arg >>= 8
             else:
                 extended_args.append(extended_arg)
-                extended_args.reverse() # reverse because we appended in the order
-                                        # of most recent EXTENDED_ARG (the one closest to
-                                        # the actual opcode) to the least recent EXTENDED_ARG
-                                        # (the one farthest from the actual opcode)
+                extended_args.reverse()  # reverse because we appended in the order
+                # of most recent EXTENDED_ARG (the one closest to
+                # the actual opcode) to the least recent EXTENDED_ARG
+                # (the one farthest from the actual opcode)
                 break
 
         new_arg = arg & 255
@@ -114,7 +114,8 @@ class Code:
 
         own_copy.co_consts = tuple(new_consts)
 
-        return empty.__code__.replace(**{key: value for key, value in vars(own_copy).items() if key.startswith("co_")})
+        return empty.__code__.replace(**{key: value for key, value in vars(own_copy).items() if
+                                         key in inspect.getfullargspec(empty.__code__.replace).kwonlyargs})
 
     def __repr__(self):
         return f"<Code object {self.co_name} at {hex(id(self))}"
